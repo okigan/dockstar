@@ -35,16 +35,14 @@ DEB_MIRROR="http://cdn.debian.net/debian"
 
 MKE2FS_URL="$MIRROR/mke2fs"
 PKGDETAILS_URL="$MIRROR/pkgdetails"
-URL_UBOOT="$MIRROR/uboot/install_uboot_mtd0.sh"
-URL_DEBOOTSTRAP="$DEB_MIRROR/pool/main/d/debootstrap/debootstrap_1.0.28_all.deb"
+URL_DEBOOTSTRAP="$DEB_MIRROR/pool/main/d/debootstrap/debootstrap_1.0.29_all.deb"
 URL_FW_CONFIG="$MIRROR/uboot/fw_env.config"
 
 # Default binary locations
-MKE2FS=/sbin/mke2fs
 PKGDETAILS=/usr/share/debootstrap/pkgdetails
 
 # Where should the temporary 'debian root' be mounted
-ROOT=/tmp/debian
+ROOT=./tmp/debian
 
 # debootstrap configuration
 RELEASE=squeeze
@@ -68,13 +66,13 @@ KERNEL_VERSION=2.6.32-5-kirkwood
 
 RO_ROOT_=0
 
-TIMESTAMP=$(date +"%d%m%Y%H%M%S")
-touch /sbin/$TIMESTAMP
-if [ ! -f /sbin/$TIMESTAMP ]; then
-  RO_ROOT=1
-else
-  rm /sbin/$TIMESTAMP
-fi
+#TIMESTAMP=$(date +"%d%m%Y%H%M%S")
+#touch /sbin/$TIMESTAMP
+#if [ ! -f /sbin/$TIMESTAMP ]; then
+#  RO_ROOT=1
+#else
+#  rm /sbin/$TIMESTAMP
+#fi
 
 verify_md5 ()
 {
@@ -209,22 +207,11 @@ echo ""
 echo ""
 echo "!!!!!!  DANGER DANGER DANGER DANGER DANGER DANGER  !!!!!!"
 echo ""
-echo "This script will replace the bootloader on /dev/mtd0."
-echo ""
-echo "If you lose power while the bootloader is being flashed,"
-echo "your device could be left in an unusable state."
-echo ""
 echo ""
 echo "This script will configure your Dockstar to boot Debian Squeeze"
 echo "from a USB device.  Before running this script, you should have"
 echo "used fdisk to create the following partitions:"
 echo ""
-echo "/dev/sda1 (Linux ext2, at least 400MB)"
-echo "/dev/sda2 (Linux swap, recommended 256MB)"
-echo ""
-echo ""
-echo "This script will DESTROY ALL EXISTING DATA on /dev/sda1"
-echo "Please double check that the device on /dev/sda1 is the correct device."
 echo ""
 echo "By typing ok, you agree to assume all liabilities and risks"
 echo "associated with running this installer."
@@ -239,9 +226,6 @@ then
   exit
 fi
 
-
-# Stop the pogoplug engine
-killall -q hbwd
 
 ROOT_DEV=/dev/sda1 # Don't change this, uboot expects to boot from here
 SWAP_DEV=/dev/sda2
@@ -260,72 +244,27 @@ SRC=$ROOT
 ##########
 ##########
 #
-# Install uBoot on /dev/mtd0
-#
-##########
-##########
-
-
-# Get the uBoot install script
-if [ ! -f /tmp/install_uboot_mtd0.sh ];
-then
-  wget -P /tmp $URL_UBOOT
-  chmod +x /tmp/install_uboot_mtd0.sh
-fi
-
-echo "Installing Bootloader"
-/tmp/install_uboot_mtd0.sh --noprompt
-
-
-##########
-##########
-#
-# Format /dev/sda
-#
-##########
-##########
-
-umount $ROOT > /dev/null 2>&1
-
-if ! which mke2fs >/dev/null; then
-  install "$MKE2FS"         "$MKE2FS_URL"          755
-else
-  MKE2FS=$(which mke2fs)
-fi
-
-$MKE2FS $ROOT_DEV
-/sbin/mkswap $SWAP_DEV
-
-mount $ROOT_DEV $ROOT
-
-if [ "$?" -ne "0" ]; then
-  echo "Could not mount $ROOT_DEV on $ROOT"
-  exit 1
-fi
-
-
-##########
-##########
-#
 # Download debootstrap
 #
 ##########
 ##########
 
-if [ ! -e /usr/sbin/debootstrap ]; then
-  mkdir /tmp/debootstrap
-  cd /tmp/debootstrap
+if [ ! -e ./tmp/usr/sbin/debootstrap ]; then
+  mkdir -p ./tmp/download
+  cd ./tmp/download
   wget -O debootstrap.deb $URL_DEBOOTSTRAP
   ar xv debootstrap.deb
   tar -xzvf data.tar.gz
 
-  if [ "$RO_ROOT" = "1" ]; then
-    mount -o remount,rw /
-  fi
-  mv ./usr/sbin/debootstrap /usr/sbin
-  mv ./usr/share/debootstrap /usr/share
-
+  mkdir -p ../usr/sbin
+  mkdir -p ../usr/share
+  
+  mv ./usr/sbin/debootstrap ../usr/sbin
+  mv ./usr/share/debootstrap ../usr/share
+  
   install "$PKGDETAILS" "$PKGDETAILS_URL" 755
+  
+  cd ..
 
   if [ "$RO_ROOT" = "1" ]; then
     mount -o remount,ro /
@@ -346,7 +285,7 @@ echo ""
 echo "# Starting debootstrap installation"
 
 # Squeeze
-/usr/sbin/debootstrap --verbose --arch=armel --variant=$VARIANT --include=$EXTRA_PACKAGES $RELEASE $ROOT $DEB_MIRROR
+./tmp/usr/sbin/debootstrap --verbose --arch=armel --variant=$VARIANT --include=$EXTRA_PACKAGES $RELEASE $ROOT $DEB_MIRROR
 
 if [ "$?" -ne "0" ]; then
   echo "debootstrap failed."
@@ -440,11 +379,3 @@ echo ""
 echo "The new root password is 'root'  Please change it immediately after"
 echo "logging in."
 echo ""
-echo -n "Reboot now? [Y/n] "
-
-read IN
-if [ "$IN" = "" -o "$IN" = "y" -o "$IN" = "Y" ];
-then
-  /sbin/reboot
-fi
-
